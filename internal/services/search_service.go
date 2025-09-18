@@ -18,6 +18,70 @@ type SearchService struct {
 	es *database.ElasticsearchClient
 }
 
+func NewSearchService(es *database.ElasticsearchClient) *SearchService {
+	return &SearchService{es: es}
+}
+
+func (s *SearchService) InitializeIndex(ctx context.Context) error {
+	req := esapi.IndicesExistsRequest{
+		Index: []string{database.PostsIndex},
+	}
+
+	res, err := req.Do(ctx, s.es)
+	if err != nil {
+		return fmt.Errorf("failed to check if index exists: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == 200 {
+		return nil
+	}
+
+	createReq := esapi.IndicesCreateRequest{
+		Index: database.PostsIndex,
+		Body:  strings.NewReader(database.GetPostsMapping()),
+	}
+
+	createRes, err := createReq.Do(ctx, s.es)
+	if err != nil {
+		return fmt.Errorf("failed to create index: %w", err)
+	}
+	defer createRes.Body.Close()
+
+	if createRes.IsError() {
+		return fmt.Errorf("failed to create index: %s", createRes.Status())
+	}
+
+	return nil
+}
+
+func (s *SearchService) IndexPost(ctx context.Context, post *models.Post) error {
+	doc := post.ToElasticsearchDoc()
+	data, err := json.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal post: %w", err)
+	}
+
+	req := esapi.IndexRequest{
+		Index:      database.PostsIndex,
+		DocumentID: post.ID.String(),
+		Body:       bytes.NewReader(data),
+		Refresh:    "true",
+	}
+
+	res, err := req.Do(ctx, s.es)
+	if err != nil {
+		return fmt.Errorf("failed to index post: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("failed to index post: %s", res.Status())
+	}
+
+	return nil
+}
+
 func (s *SearchService) DeletePost(ctx context.Context, id uuid.UUID) error {
 	req := esapi.DeleteRequest{
 		Index:      database.PostsIndex,
@@ -48,9 +112,8 @@ func (s *SearchService) SearchPosts(ctx context.Context, req *models.PostSearchR
 
 	from := (req.Page - 1) * req.Limit
 
-	// Build search query
 	query := s.buildSearchQuery(req.Query, req.Tags)
-	
+
 	searchReq := esapi.SearchRequest{
 		Index: []string{database.PostsIndex},
 		Body:  strings.NewReader(query),
@@ -110,17 +173,15 @@ func (s *SearchService) buildSearchQuery(queryString, tags string) string {
 
 	mustQueries := []interface{}{}
 
-	// Add text search if query is provided
 	if queryString != "" {
 		mustQueries = append(mustQueries, map[string]interface{}{
 			"multi_match": map[string]interface{}{
 				"query":  queryString,
-				"fields": []string{"title", "content"},
+				"fields": []string{"title^3", "content", "tags"},
 			},
 		})
 	}
 
-	// Add tag filter if tags are provided
 	if tags != "" {
 		tagList := strings.Split(tags, ",")
 		for i, tag := range tagList {
@@ -133,7 +194,6 @@ func (s *SearchService) buildSearchQuery(queryString, tags string) string {
 		})
 	}
 
-	// If no specific queries, match all
 	if len(mustQueries) == 0 {
 		mustQueries = append(mustQueries, map[string]interface{}{
 			"match_all": map[string]interface{}{},
@@ -144,71 +204,4 @@ func (s *SearchService) buildSearchQuery(queryString, tags string) string {
 
 	queryJSON, _ := json.Marshal(query)
 	return string(queryJSON)
-}
-
-func NewSearchService(es *database.ElasticsearchClient) *SearchService {
-	return &SearchService{es: es}
-}
-
-func (s *SearchService) InitializeIndex(ctx context.Context) error {
-	// Check if index exists
-	req := esapi.IndicesExistsRequest{
-		Index: []string{database.PostsIndex},
-	}
-
-	res, err := req.Do(ctx, s.es)
-	if err != nil {
-		return fmt.Errorf("failed to check if index exists: %w", err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode == 200 {
-		// Index already exists
-		return nil
-	}
-
-	// Create index with mapping
-	createReq := esapi.IndicesCreateRequest{
-		Index: database.PostsIndex,
-		Body:  strings.NewReader(database.GetPostsMapping()),
-	}
-
-	createRes, err := createReq.Do(ctx, s.es)
-	if err != nil {
-		return fmt.Errorf("failed to create index: %w", err)
-	}
-	defer createRes.Body.Close()
-
-	if createRes.IsError() {
-		return fmt.Errorf("failed to create index: %s", createRes.Status())
-	}
-
-	return nil
-}
-
-func (s *SearchService) IndexPost(ctx context.Context, post *models.Post) error {
-	doc := post.ToElasticsearchDoc()
-	data, err := json.Marshal(doc)
-	if err != nil {
-		return fmt.Errorf("failed to marshal post: %w", err)
-	}
-
-	req := esapi.IndexRequest{
-		Index:      database.PostsIndex,
-		DocumentID: post.ID.String(),
-		Body:       bytes.NewReader(data),
-		Refresh:    "true",
-	}
-
-	res, err := req.Do(ctx, s.es)
-	if err != nil {
-		return fmt.Errorf("failed to index post: %w", err)
-	}
-	defer res.Body.Close()
-
-	if res.IsError() {
-		return fmt.Errorf("failed to index post: %s", res.Status())
-	}
-
-	return nil
 }

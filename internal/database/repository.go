@@ -41,7 +41,6 @@ func (r *PostRepository) Search(req models.PostSearchRequest) ([]models.Post, in
 
 	query := r.db.Model(&models.Post{})
 
-	// Add search conditions
 	if req.Query != "" {
 		query = query.Where("title ILIKE ? OR content ILIKE ?", "%"+req.Query+"%", "%"+req.Query+"%")
 	}
@@ -50,10 +49,8 @@ func (r *PostRepository) Search(req models.PostSearchRequest) ([]models.Post, in
 		query = query.Where("? = ANY(tags)", req.Tags)
 	}
 
-	// Count total
 	query.Count(&total)
 
-	// Apply pagination
 	if req.Limit > 0 {
 		query = query.Limit(req.Limit)
 	}
@@ -61,7 +58,6 @@ func (r *PostRepository) Search(req models.PostSearchRequest) ([]models.Post, in
 		query = query.Offset((req.Page - 1) * req.Limit)
 	}
 
-	// Order by created_at DESC
 	query = query.Order("created_at DESC")
 
 	err := query.Find(&posts).Error

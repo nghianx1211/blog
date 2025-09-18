@@ -1,35 +1,57 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
+	"log"
+	"time"
 
 	"blog/internal/config"
 
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-type PostgresDB struct {
-	*sql.DB
-}
+func NewGormDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
+	dsn := cfg.DSN()
 
-func NewPostgresDB(cfg *config.DatabaseConfig) (*PostgresDB, error) {
-	db, err := sql.Open("postgres", cfg.DSN())
+	// GORM logger
+	newLogger := logger.New(
+		log.New(log.Writer(), "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  logger.Info,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		},
+	)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	if err := db.Exec(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`).Error; err != nil {
+		return nil, fmt.Errorf("failed to enable pgcrypto extension: %w", err)
 	}
 
-	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-
-	return &PostgresDB{db}, nil
+	return db, nil
 }
 
-func (db *PostgresDB) Close() error {
-	return db.DB.Close()
+func Close(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }

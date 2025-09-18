@@ -48,35 +48,7 @@ go mod init blog
 go mod tidy
 ```
 
-2. **Setup databases:**
-```bash
-# PostgreSQL
-createdb blog_db
-
-# Chạy migrations
-migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/blog_db?sslmode=disable" up
-
-# Redis (port 6379)
-redis-server
-
-# Elasticsearch (port 9200)
-# Tải và chạy Elasticsearch
-```
-
-3. **Cài đặt biến môi trường:**
-```bash
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_USER=postgres
-export DB_PASSWORD=postgres
-export DB_NAME=blog_db
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export ELASTICSEARCH_URL=http://localhost:9200
-export SERVER_PORT=8080
-```
-
-4. **Chạy ứng dụng:**
+2. **Chạy ứng dụng:**
 ```bash
 go run cmd/server/main.go
 ```
@@ -92,6 +64,26 @@ curl -X POST http://localhost:8080/api/v1/posts \
     "content": "Đây là nội dung của bài viết đầu tiên",
     "tags": ["golang", "api", "blog"]
   }'
+```
+
+### Lấy bài viết theo ID
+```bash
+curl -X GET http://localhost:8080/api/v1/posts/<post_id>
+```
+
+### Cập nhật bài viết
+```bash
+curl -X PUT http://localhost:8080/api/v1/posts/<post_id> \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Tiêu đề mới",
+    "content": "Nội dung mới"
+  }'
+```
+
+### Xóa bài viết
+```bash
+curl -X DELETE http://localhost:8080/api/v1/posts/<post_id>
 ```
 
 ### Tìm kiếm bài viết
@@ -117,7 +109,6 @@ blog/
 │   ├── services/        # Business logic
 │   ├── middleware/      # HTTP middleware
 │   └── utils/          # Utilities
-├── migrations/          # Database migrations
 ├── docker-compose.yml   # Docker setup
 └── README.md
 ```
@@ -129,13 +120,3 @@ blog/
 3. **Connection Pooling**: Tối ưu kết nối database
 4. **Elasticsearch**: Tìm kiếm full-text hiệu suất cao
 5. **Graceful Shutdown**: Đảm bảo tắt ứng dụng an toàn
-
-## Monitoring & Health Check
-
-- Health check endpoint: `GET /health`
-- Logging middleware cho tất cả requests
-- Recovery middleware để xử lý panic
-
-## License
-
-MIT License

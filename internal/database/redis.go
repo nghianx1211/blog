@@ -20,7 +20,6 @@ func NewRedisClient(cfg *config.RedisConfig) (*RedisClient, error) {
 		DB:       0,
 	})
 
-	// Test connection
 	ctx := context.Background()
 	_, err := rdb.Ping(ctx).Result()
 	if err != nil {

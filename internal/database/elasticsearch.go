@@ -23,7 +23,6 @@ func NewElasticsearchClient(cfg *config.ElasticsearchConfig) (*ElasticsearchClie
 
 const PostsIndex = "posts"
 
-// GetPostsMapping returns the mapping for posts index
 func GetPostsMapping() string {
 	return `{
 		"mappings": {
